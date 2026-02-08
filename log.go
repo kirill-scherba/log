@@ -127,7 +127,7 @@ func (cw *customWriter) Write(p []byte) (n int, err error) {
 // and for some additional loggers is set to a customWriter, which writes log
 // entries to stdout and/or to Elasticsearch.
 // Finally, a message is printed to indicate that the loggers have been initialized.
-func Init(config Config) {
+func Init(config *Config) {
 
 	// Set application type
 	appType = config.AppType
@@ -162,25 +162,37 @@ func Init(config Config) {
 	// Wait for loggers to start
 	loggers.wgStart.Wait()
 
+	// Set config
+	loggers.config = config
+
 	// Print message when loggers are initialized
 	if !config.DoesNotShowInitMessage {
 		log.Println("logger initialized")
 	}
 }
 
-// CLose closes the Elasticsearch logger and the file logger.
+// Close closes the Elasticsearch logger and the file logger.
 // It is called once when the application exits.
 // It stops the Elasticsearch logger and the file logger from writing log
 // entries to Elasticsearch and/or to disk.
-func CLose() {
+func Close() {
+
+	// Print message when loggers are closed
+	if !loggers.config.DoesNotShowInitMessage {
+		log.Println("logger closed")
+	}
+
+	// Close Elasticsearch logger
 	if loggers.useEsLogger {
 		loggers.es.close()
 	}
 
+	// Close file logger
 	if loggers.useFailLogger {
 		loggers.file.close()
 	}
 
+	// Wait for loggers to close
 	loggers.wgClose.Wait()
 }
 

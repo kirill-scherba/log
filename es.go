@@ -131,6 +131,7 @@ func (e *es) init(appShort string, esConfig *EsConfig) {
 
 // close closes the entry channel and stop the entry processing goroutine.
 func (e *es) close() {
+	loggers.useEsLogger = false
 	close(e.esEntryChannel)
 }
 

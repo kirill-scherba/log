@@ -36,6 +36,9 @@ type loggersType struct {
 
 	// Close wait group
 	wgClose sync.WaitGroup
+
+	// Config set on init
+	config *Config
 }
 
 // newLoggers returns a new loggersType with an entry channel and two parameters set to default values.
@@ -43,9 +46,10 @@ type loggersType struct {
 func newLoggers() (l *loggersType) {
 	// Create a new loggersType with default values
 	l = &loggersType{
-		useStdoutLogger: true,    // Set log to stdout by default
-		es:              &es{},   // Create a new Elasticsearch logger object
-		file:            &file{}, // Create a new fail logger object
+		useStdoutLogger: true,      // Set log to stdout by default
+		es:              &es{},     // Create a new Elasticsearch logger object
+		file:            &file{},   // Create a new fail logger object
+		config:          &Config{}, // Create a new empty config object
 	}
 	return
 }

@@ -4,8 +4,8 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -17,6 +17,17 @@ type FileConfig struct {
 
 	// Create new log file after
 	CreateNewAfter time.Duration
+
+	// Remove old log file after
+	RemoveOldAfter time.Duration
+
+	// Remove old log file suffixes, e.g. ".log", ".log.gz".
+	// By default if RemoveSuffixes is empty then ".log.gz" is used
+	RemoveSuffixes []string
+
+	// Remove old log files timer
+	removeLogsTimer       *time.Timer
+	stopRemoveLogsChannel chan struct{}
 }
 
 // file is a struct that holds information about how to send log entries to a
@@ -50,17 +61,37 @@ func (f *file) init(appShort string, fileConfig *FileConfig) {
 	f.FileConfig = fileConfig
 	f.AppShort = appShort
 
+	// Set default remove suffixes
+	if len(f.RemoveSuffixes) == 0 {
+		f.RemoveSuffixes = []string{".log.gz"}
+	}
+
 	// Create entry channel
 	f.fileEntryChannel = make(chan *LogEntry, 100)
 
 	// Start entry handler
 	loggers.wgStart.Add(1)
 	go f.entryHandler()
+
+	// Start Remove old log files
+	loggers.wgStart.Add(1)
+	go f.removeOldFiles()
 }
 
 // close closes the entry channel and stop the entry processing goroutine.
 func (f *file) close() {
+
+	// Stop file logger processing
+	loggers.useFailLogger = false
+
+	// Stop goroutine processing log messages
 	close(f.fileEntryChannel)
+
+	// Stop goroutine processing removing old log files
+	if f.removeLogsTimer != nil {
+		f.removeLogsTimer.Stop()
+		close(f.stopRemoveLogsChannel)
+	}
 }
 
 // entryHandler is a goroutine that consumes log entries from the fileEntryChannel.
@@ -78,6 +109,9 @@ func (f *file) entryHandler() {
 		entry, ok := <-f.fileEntryChannel
 		if !ok {
 			// If the channel is closed, exit the goroutine
+			if f.f != nil {
+				f.f.Close()
+			}
 			break
 		}
 
@@ -115,7 +149,7 @@ func (f *file) entryHandler() {
 // file with the format "appshort_timestamp.log". It then compresses the old
 // log file after 1 second and removes the old log file.
 func (f *file) newLogfile() (err error) {
-	var now = time.Now()
+	var now = time.Now().UTC()
 	timeStr := now.Format("2006.01.02-15.04.05")
 
 	folder := f.FileConfig.Folder
@@ -143,17 +177,17 @@ func (f *file) newLogfile() (err error) {
 	// Compress end remove old file after 1 second
 	if f.f != nil {
 		fileName := f.f.Name()
+		loggers.wgClose.Add(1)
 		time.AfterFunc(1*time.Second, func() {
-			time.Sleep(1 * time.Second)
 			f.compressFile(fileName)
 			os.Remove(fileName)
+			loggers.wgClose.Done()
 		})
 	}
 
 	// Set new file
 	f.f = file
 	f.fCreatedAt = now
-	log.Println("create new log file:", file.Name())
 	return
 }
 
@@ -185,4 +219,66 @@ func (f *file) compressFile(name string) (err error) {
 	}
 
 	return
+}
+
+// removeOldFiles removes old log files.
+func (f *file) removeOldFiles() {
+	loggers.wgStart.Done()
+
+	// Check if RemoveOldAfter is set
+	if f.RemoveOldAfter == 0 {
+		return
+	}
+
+	// Create  timer for removing old log files
+	f.removeLogsTimer = time.NewTimer(1 * time.Second)
+	f.stopRemoveLogsChannel = make(chan struct{})
+
+	// Wait this goroutine return when logger close
+	loggers.wgClose.Add(1)
+	defer loggers.wgClose.Done()
+
+	for {
+		select {
+		// Wait for removeTimer timer tick or stop
+		case <-f.removeLogsTimer.C:
+
+		// Wait for stop
+		case <-f.stopRemoveLogsChannel:
+			return
+		}
+
+		// Get all files in folder
+		folder := f.FileConfig.Folder + "/" + f.AppShort
+		files, err := os.ReadDir(folder)
+		if err != nil {
+			continue
+		}
+
+		// Loop through suffixes
+		for _, suffix := range f.RemoveSuffixes {
+			// Loop through files
+			for _, file := range files {
+				// Get file name
+				fileName := file.Name()
+
+				// Check if file is log.gz file
+				if !strings.HasSuffix(fileName, suffix) {
+					continue
+				}
+
+				// Get filename without extension
+				fileNameNoExt := strings.TrimSuffix(fileName, suffix)
+
+				// Check if file is older than RemoveOldAfter and remove it
+				fileTime, err := time.Parse("2006.01.02-15.04.05", strings.Split(fileNameNoExt, "_")[1])
+				if err != nil {
+					continue
+				}
+				if time.Since(fileTime) > f.RemoveOldAfter {
+					os.Remove(folder + "/" + fileName)
+				}
+			}
+		}
+	}
 }
