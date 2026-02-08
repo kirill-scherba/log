@@ -129,14 +129,14 @@ func (cw *customWriter) Write(p []byte) (n int, err error) {
 // Finally, a message is printed to indicate that the loggers have been initialized.
 func Init(config *Config) {
 
+	// Set config
+	loggers.config = config
+
 	// Set application type
 	appType = config.AppType
 
 	// Set useStdout
 	loggers.useStdoutLogger = config.UseStdout
-
-	// Set filter level
-	loggers.filterLevels = config.FilterLevels
 
 	// Set output for default application logger
 	w := &customWriter{}
@@ -149,21 +149,18 @@ func Init(config *Config) {
 
 	// Set elasticsearch logger config and start elasticsearch logger handler
 	if config.EsConfig != nil {
-		loggers.es.init(config.AppShort, config.EsConfig)
 		loggers.useEsLogger = true
+		loggers.es.init(config.AppShort, config.EsConfig)
 	}
 
 	// Set file logger config and start file logger handler
 	if config.FileConfig != nil {
-		loggers.file.init(config.AppShort, config.FileConfig)
 		loggers.useFailLogger = true
+		loggers.file.init(config.AppShort, config.FileConfig)
 	}
 
 	// Wait for loggers to start
 	loggers.wgStart.Wait()
-
-	// Set config
-	loggers.config = config
 
 	// Print message when loggers are initialized
 	if !config.DoesNotShowInitMessage {
@@ -184,11 +181,13 @@ func Close() {
 
 	// Close Elasticsearch logger
 	if loggers.useEsLogger {
+		loggers.useEsLogger = false
 		loggers.es.close()
 	}
 
 	// Close file logger
 	if loggers.useFailLogger {
+		loggers.useFailLogger = false
 		loggers.file.close()
 	}
 

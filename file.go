@@ -61,28 +61,33 @@ func (f *file) init(appShort string, fileConfig *FileConfig) {
 	f.FileConfig = fileConfig
 	f.AppShort = appShort
 
-	// Set default remove suffixes
-	if len(f.RemoveSuffixes) == 0 {
-		f.RemoveSuffixes = []string{".log.gz"}
-	}
-
-	// Create entry channel
+	// Create entry channel and start entry processing
 	f.fileEntryChannel = make(chan *LogEntry, 100)
-
-	// Start entry handler
 	loggers.wgStart.Add(1)
+	loggers.wgClose.Add(1)
 	go f.entryHandler()
 
 	// Start Remove old log files
-	loggers.wgStart.Add(1)
-	go f.removeOldFiles()
+	if f.RemoveOldAfter > 0 {
+
+		// Set default remove suffixes
+		if len(f.RemoveSuffixes) == 0 {
+			f.RemoveSuffixes = []string{".log.gz"}
+		}
+
+		// Create timer for removing old log files, and channel for stop
+		f.removeLogsTimer = time.NewTimer(1 * time.Second)
+		f.stopRemoveLogsChannel = make(chan struct{})
+
+		// Start removing old log files process
+		loggers.wgStart.Add(1)
+		loggers.wgClose.Add(1)
+		go f.removeOldFiles()
+	}
 }
 
 // close closes the entry channel and stop the entry processing goroutine.
 func (f *file) close() {
-
-	// Stop file logger processing
-	loggers.useFailLogger = false
 
 	// Stop goroutine processing log messages
 	close(f.fileEntryChannel)
@@ -100,8 +105,6 @@ func (f *file) close() {
 // time period. Finally, it sends the log entries to file.
 func (f *file) entryHandler() {
 	loggers.wgStart.Done()
-
-	loggers.wgClose.Add(1)
 	defer loggers.wgClose.Done()
 
 	// Loop until the goroutine is stopped
@@ -224,18 +227,6 @@ func (f *file) compressFile(name string) (err error) {
 // removeOldFiles removes old log files.
 func (f *file) removeOldFiles() {
 	loggers.wgStart.Done()
-
-	// Check if RemoveOldAfter is set
-	if f.RemoveOldAfter == 0 {
-		return
-	}
-
-	// Create  timer for removing old log files
-	f.removeLogsTimer = time.NewTimer(1 * time.Second)
-	f.stopRemoveLogsChannel = make(chan struct{})
-
-	// Wait this goroutine return when logger close
-	loggers.wgClose.Add(1)
 	defer loggers.wgClose.Done()
 
 	for {

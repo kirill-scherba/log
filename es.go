@@ -126,12 +126,12 @@ func (e *es) init(appShort string, esConfig *EsConfig) {
 
 	// Start entry handler
 	loggers.wgStart.Add(1)
+	loggers.wgClose.Add(1)
 	go e.entryHandler()
 }
 
 // close closes the entry channel and stop the entry processing goroutine.
 func (e *es) close() {
-	loggers.useEsLogger = false
 	close(e.esEntryChannel)
 }
 
@@ -143,8 +143,6 @@ func (e *es) close() {
 // If sending fails, it buffers the batch for later retries.
 func (e *es) entryHandler() {
 	loggers.wgStart.Done()
-
-	loggers.wgClose.Add(1)
 	defer loggers.wgClose.Done()
 
 	// Slice to hold log entries

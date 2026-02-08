@@ -55,7 +55,11 @@ func TestLogger(t *testing.T) {
 	t.Run("Init", func(t *testing.T) {
 
 		// Initialise logger
-		Init(&Config{AppShort: "log-test", AppType: "DEV", UseStdout: true,
+		Init(&Config{
+			AppShort: "log-test", 
+			AppType: "DEV", 
+			UseStdout: true,
+			// FilterLevels: []LogLevel{LevelDebug},
 			FileConfig: &FileConfig{
 				Folder: "/tmp", 
 				CreateNewAfter: 1 * time.Second,
@@ -66,13 +70,13 @@ func TestLogger(t *testing.T) {
 		defer Close()
 
 		// Send a message to the default logger
-		Debug("some debug message 1", map[string]any{"key": "value"})
+		Info("some info message 1", map[string]any{"key": "value"})
 
 		// Sleep 2 seconds to wait for the log file name to be renewated
 		time.Sleep(2 * time.Second)
 
 		// Send a message to the default logger
-		Debug("some debug message 2", map[string]any{"key": "value"})
+		Info("some info message 2", map[string]any{"key": "value"})
 
 		// time.Sleep(3 * time.Second)
 	})

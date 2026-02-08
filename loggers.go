@@ -22,9 +22,6 @@ type loggersType struct {
 	// useFailLogger is a boolean that indicates whether to use the fail logger
 	useFailLogger bool
 
-	// filterLevels is a list of log levels to filter out.
-	filterLevels []LogLevel
-
 	// Elasticsearch logger
 	*es
 
@@ -62,8 +59,8 @@ func newLoggers() (l *loggersType) {
 func (l *loggersType) send(entry *LogEntry) (err error) {
 
 	// Filter logger entries by level
-	if l.filterLevels != nil {
-		if slices.Contains(l.filterLevels, entry.Level) {
+	if l.config.FilterLevels != nil {
+		if slices.Contains(l.config.FilterLevels, entry.Level) {
 			return
 		}
 	}
